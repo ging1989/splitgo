@@ -6,6 +6,7 @@ import Link from "next/link";
 import { supabase } from "@/src/lib/supabase";
 import AddExpenseModal from "@/src/components/expenses/AddExpenseModal";
 import AddMemberModal from "@/src/components/trips/AddMemberModal";
+import SettlementSection from "@/src/components/trips/SettlementSection";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -145,6 +146,68 @@ function SkeletonBlock({ className }: { className: string }) {
   return <div className={`bg-gray-200 rounded animate-pulse ${className}`} />;
 }
 
+function PerPersonSpending({
+  members,
+  expenses,
+}: {
+  members: TripMember[];
+  expenses: Expense[];
+}) {
+  const paid = new Map<string, number>();
+  members.forEach((m) => paid.set(m.id, 0));
+  expenses.forEach((e) => {
+    if (e.paid_by_member_id) {
+      paid.set(e.paid_by_member_id, (paid.get(e.paid_by_member_id) ?? 0) + Number(e.amount));
+    }
+  });
+
+  const rows = members
+    .map((m, idx) => ({
+      id: m.id,
+      name: (m.profiles?.full_name ?? m.display_name ?? "?").split(" ")[0],
+      amount: paid.get(m.id) ?? 0,
+      colorIdx: idx,
+    }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const maxAmount = Math.max(...rows.map((r) => r.amount), 1);
+
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm">
+      <h2 className="font-semibold text-gray-900 text-sm mb-3">สรุปการจ่ายของแต่ละคน</h2>
+      <div className="space-y-3">
+        {rows.map((row) => (
+          <div key={row.id} className="flex items-center gap-3">
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0"
+              style={{ backgroundColor: AVATAR_COLORS[row.colorIdx % AVATAR_COLORS.length] }}
+            >
+              {row.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm text-gray-700">{row.name}</span>
+                <span className="font-bold text-green-600 text-sm">
+                  ฿{row.amount.toLocaleString()}
+                </span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${(row.amount / maxAmount) * 100}%`,
+                    backgroundColor: AVATAR_COLORS[row.colorIdx % AVATAR_COLORS.length],
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TripDetailPage() {
@@ -158,6 +221,7 @@ export default function TripDetailPage() {
   const [currentUserId, setCurrentUserId] = useState("");
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [settlementKey, setSettlementKey] = useState(0);
 
   useEffect(() => {
     if (id) loadData(id);
@@ -189,9 +253,35 @@ export default function TripDetailPage() {
       return;
     }
 
-    setTrip(tripData as unknown as TripDetail);
+    const enriched = await enrichTripMembers(tripData as unknown as TripDetail);
+    setTrip(enriched);
     await fetchExpenses(tripId);
     setLoading(false);
+  }
+
+  async function enrichTripMembers(tripData: TripDetail): Promise<TripDetail> {
+    const registeredIds = tripData.trip_members
+      .filter((m) => m.user_id)
+      .map((m) => m.user_id as string);
+
+    if (!registeredIds.length) return tripData;
+
+    const { data: profileRows } = await supabase
+      .from("profiles")
+      .select("id, full_name, avatar_url")
+      .in("id", registeredIds);
+
+    if (!profileRows?.length) return tripData;
+
+    const profileMap = new Map(profileRows.map((p) => [p.id, p]));
+    return {
+      ...tripData,
+      trip_members: tripData.trip_members.map((m) =>
+        m.user_id && profileMap.has(m.user_id)
+          ? { ...m, profiles: profileMap.get(m.user_id)! }
+          : m
+      ),
+    };
   }
 
   async function fetchExpenses(tripId: string) {
@@ -214,28 +304,36 @@ export default function TripDetailPage() {
         .map((e) => e.paid_by as string)
     )];
 
-    const [{ data: memberRows }, { data: profileRows }] = await Promise.all([
+    type RawMember = { id: string; user_id: string | null; display_name: string | null };
+    type PayerInfo = { full_name: string | null; avatar_url: string | null };
+
+    const [{ data: memberRows }, { data: legacyProfileRows }] = await Promise.all([
       memberIds.length > 0
-        ? supabase.from("trip_members")
-            .select("id, display_name, profiles(full_name, avatar_url)")
-            .in("id", memberIds)
+        ? supabase.from("trip_members").select("id, user_id, display_name").in("id", memberIds)
         : Promise.resolve({ data: [] as unknown[] }),
       legacyUserIds.length > 0
-        ? supabase.from("profiles")
-            .select("id, full_name, avatar_url")
-            .in("id", legacyUserIds)
+        ? supabase.from("profiles").select("id, full_name, avatar_url").in("id", legacyUserIds)
         : Promise.resolve({ data: [] as unknown[] }),
     ]);
 
-    type PayerInfo = { full_name: string | null; avatar_url: string | null };
+    const rawMembers = (memberRows ?? []) as RawMember[];
+    const registeredPayerIds = [...new Set(rawMembers.filter((m) => m.user_id).map((m) => m.user_id as string))];
+    const { data: payerProfiles } = registeredPayerIds.length > 0
+      ? await supabase.from("profiles").select("id, full_name, avatar_url").in("id", registeredPayerIds)
+      : { data: [] as Profile[] };
+    const payerProfileMap = new Map((payerProfiles ?? []).map((p) => [p.id, p as Profile]));
+
     const memberPayerMap: Record<string, PayerInfo> = Object.fromEntries(
-      ((memberRows ?? []) as { id: string; display_name: string | null; profiles: PayerInfo | null }[]).map((m) => [
+      rawMembers.map((m) => [
         m.id,
-        { full_name: (m.profiles?.full_name ?? m.display_name) ?? null, avatar_url: m.profiles?.avatar_url ?? null },
+        {
+          full_name: (m.user_id ? payerProfileMap.get(m.user_id)?.full_name : null) ?? m.display_name ?? null,
+          avatar_url: (m.user_id ? payerProfileMap.get(m.user_id)?.avatar_url : null) ?? null,
+        },
       ])
     );
     const profilePayerMap: Record<string, PayerInfo> = Object.fromEntries(
-      ((profileRows ?? []) as Profile[]).map((p) => [p.id, p])
+      ((legacyProfileRows ?? []) as Profile[]).map((p) => [p.id, p])
     );
 
     setExpenses(
@@ -251,6 +349,7 @@ export default function TripDetailPage() {
   async function handleExpenseAdded() {
     setShowExpenseModal(false);
     if (id) await fetchExpenses(id);
+    setSettlementKey((k) => k + 1);
   }
 
   async function handleMemberAdded() {
@@ -264,7 +363,10 @@ export default function TripDetailPage() {
       )
       .eq("id", id)
       .single();
-    if (tripData) setTrip(tripData as unknown as TripDetail);
+    if (tripData) {
+      const enriched = await enrichTripMembers(tripData as unknown as TripDetail);
+      setTrip(enriched);
+    }
   }
 
   const totalExpense = expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -366,12 +468,37 @@ export default function TripDetailPage() {
           )}
         </div>
 
+        {/* Per-person spending */}
+        {!loading && trip && expenses.length > 0 && (
+          <PerPersonSpending members={trip.trip_members} expenses={expenses} />
+        )}
+
+        {/* Settlement */}
+        {!loading && trip && trip.trip_members.length > 0 && (
+          <SettlementSection
+            tripId={trip.id}
+            members={trip.trip_members}
+            refreshKey={settlementKey}
+          />
+        )}
+
         {/* Expenses */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-1">
             <h2 className="font-semibold text-gray-900 text-sm">
               ค่าใช้จ่าย{!loading && expenses.length > 0 ? ` (${expenses.length})` : ""}
             </h2>
+            {!loading && (
+              <button
+                onClick={() => setShowExpenseModal(true)}
+                className="flex items-center gap-1 text-green-600 text-xs font-medium"
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                  <path d="M10 5a1 1 0 0 1 1 1v3h3a1 1 0 1 1 0 2h-3v3a1 1 0 1 1-2 0v-3H6a1 1 0 1 1 0-2h3V6a1 1 0 0 1 1-1Z" />
+                </svg>
+                เพิ่มค่าใช้จ่าย
+              </button>
+            )}
           </div>
 
           {loading ? (

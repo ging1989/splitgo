@@ -148,20 +148,20 @@ export default function AddExpenseModal({
       return;
     }
 
-    // expense_participants: only registered users (user_id not null)
-    // share_amount divides by ALL selected participants (including local members)
+    // Save ALL participants (registered + local) using trip_member_id
     const shareAmount = numAmount / participantIds.length;
-    const registeredParticipants = participantIds
+    const selectedMembers = participantIds
       .map((id) => members.find((m) => m.id === id))
-      .filter((m): m is Member => m !== undefined && m.user_id !== null);
+      .filter((m): m is Member => m !== undefined);
 
-    if (registeredParticipants.length > 0) {
+    if (selectedMembers.length > 0) {
       const { error: participantError } = await supabase
         .from("expense_participants")
         .insert(
-          registeredParticipants.map((m) => ({
+          selectedMembers.map((m) => ({
             expense_id: expense.id,
-            user_id: m.user_id,
+            trip_member_id: m.id,
+            user_id: m.user_id ?? null,
             share_amount: shareAmount,
           }))
         );

@@ -74,7 +74,7 @@ export default function TripCard({ trip }: { trip: TripCardData }) {
                 const name = m.profiles?.full_name ?? "?";
                 return (
                   <span
-                    key={m.user_id}
+                    key={m.user_id ?? i}
                     className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-white text-[10px] font-semibold"
                     style={{ backgroundColor: AVATAR_COLORS[i % AVATAR_COLORS.length] }}
                   >
