@@ -21,41 +21,6 @@ function HomeIcon({ active }: { active: boolean }) {
   );
 }
 
-function ChartIcon({ active }: { active: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={`w-6 h-6 ${active ? "text-green-600" : "text-gray-400"}`}
-      fill={active ? "currentColor" : "none"}
-      stroke="currentColor"
-      strokeWidth={1.5}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"
-      />
-    </svg>
-  );
-}
-
-function WalletIcon({ active }: { active: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={`w-6 h-6 ${active ? "text-green-600" : "text-gray-400"}`}
-      fill={active ? "currentColor" : "none"}
-      stroke="currentColor"
-      strokeWidth={1.5}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1-6 0H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9m18 0V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v3"
-      />
-    </svg>
-  );
-}
 
 function GearIcon({ active }: { active: boolean }) {
   return (
@@ -81,26 +46,8 @@ function GearIcon({ active }: { active: boolean }) {
 }
 
 const navItems = [
-  {
-    href: "/trips",
-    label: "ทริป",
-    Icon: HomeIcon,
-  },
-  {
-    href: "/summary",
-    label: "สรุป",
-    Icon: ChartIcon,
-  },
-  {
-    href: "/payment",
-    label: "การเงิน",
-    Icon: WalletIcon,
-  },
-  {
-    href: "/settings",
-    label: "ตั้งค่า",
-    Icon: GearIcon,
-  },
+  { href: "/trips", label: "ทริป", Icon: HomeIcon },
+  { href: "/settings", label: "ตั้งค่า", Icon: GearIcon },
 ];
 
 export default function TripsLayout({
@@ -117,64 +64,42 @@ export default function TripsLayout({
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-50">
         <div className="flex items-end justify-around px-2 pt-2 pb-safe">
           <div className="flex items-end justify-around w-full pb-4">
-            {navItems.slice(0, 2).map(({ href, label, Icon }) => {
-              const active =
-                pathname === href || pathname.startsWith(href + "/");
+            {/* ทริป */}
+            {(() => {
+              const { href, label, Icon } = navItems[0];
+              const active = pathname === href || pathname.startsWith(href + "/");
               return (
-                <Link
-                  key={href}
-                  href={href}
-                  className="flex flex-col items-center gap-1 min-w-[56px] py-1"
-                >
+                <Link key={href} href={href} className="flex flex-col items-center gap-1 min-w-[56px] py-1">
                   <Icon active={active} />
-                  <span
-                    className={`text-[10px] font-medium ${active ? "text-green-600" : "text-gray-400"}`}
-                  >
-                    {label}
-                  </span>
+                  <span className={`text-[10px] font-medium ${active ? "text-green-600" : "text-gray-400"}`}>{label}</span>
                 </Link>
               );
-            })}
+            })()}
 
-            {/* FAB centre button */}
-            <div className="flex flex-col items-center -mt-7 min-w-[56px]">
-              <button
-                className="w-14 h-14 bg-green-600 rounded-full shadow-lg shadow-green-200 flex items-center justify-center active:bg-green-700 transition-colors"
-                aria-label="สร้างรายการใหม่"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  className="w-7 h-7 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M12 4.5v15m7.5-7.5h-15"
-                  />
+            {/* FAB centre — สร้างทริปใหม่ */}
+            <Link
+              href="/trips?new=1"
+              className="flex flex-col items-center -mt-7 min-w-[56px]"
+            >
+              <div className="w-14 h-14 bg-green-600 rounded-full shadow-lg shadow-green-200 flex items-center justify-center active:bg-green-700 transition-colors">
+                <svg viewBox="0 0 24 24" className="w-7 h-7 text-white" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
-              </button>
-            </div>
+              </div>
+              <span className="text-[10px] font-medium text-gray-400 mt-1">สร้างทริป</span>
+            </Link>
 
-            {navItems.slice(2).map(({ href, label, Icon }) => {
+            {/* ตั้งค่า */}
+            {(() => {
+              const { href, label, Icon } = navItems[1];
               const active = pathname === href;
               return (
-                <Link
-                  key={href}
-                  href={href}
-                  className="flex flex-col items-center gap-1 min-w-[56px] py-1"
-                >
+                <Link key={href} href={href} className="flex flex-col items-center gap-1 min-w-[56px] py-1">
                   <Icon active={active} />
-                  <span
-                    className={`text-[10px] font-medium ${active ? "text-green-600" : "text-gray-400"}`}
-                  >
-                    {label}
-                  </span>
+                  <span className={`text-[10px] font-medium ${active ? "text-green-600" : "text-gray-400"}`}>{label}</span>
                 </Link>
               );
-            })}
+            })()}
           </div>
         </div>
       </nav>

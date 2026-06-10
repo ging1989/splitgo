@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/src/lib/supabase";
 import TripCard, { type TripCardData } from "@/src/components/trips/TripCard";
 import CreateTripModal from "@/src/components/trips/CreateTripModal";
@@ -43,6 +43,7 @@ function TripCardSkeleton() {
 
 export default function TripsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [trips, setTrips] = useState<TripCardData[]>([]);
   const [loading, setLoading] = useState(true);
   const [displayName, setDisplayName] = useState("");
@@ -53,6 +54,13 @@ export default function TripsPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setShowModal(true);
+      router.replace("/trips");
+    }
+  }, [searchParams]);
 
   async function loadData() {
     const {
@@ -124,6 +132,12 @@ export default function TripsPage() {
     await fetchTrips(userId);
   }
 
+  const totalExpense = trips.reduce(
+    (sum, t) => sum + (t.expenses ?? []).reduce((s, e) => s + Number(e.amount), 0),
+    0
+  );
+  const tripsWithExpenses = trips.filter((t) => (t.expenses ?? []).length > 0).length;
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white px-5 pt-14 pb-4">
@@ -175,6 +189,38 @@ export default function TripsPage() {
       </header>
 
       <main className="px-5 pt-5 pb-28">
+        {/* Stats */}
+        {loading ? (
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            {[0, 1].map((i) => (
+              <div key={i} className="bg-white rounded-2xl p-4 shadow-sm animate-pulse space-y-2">
+                <div className="h-3 bg-gray-200 rounded w-2/3" />
+                <div className="h-7 bg-gray-200 rounded w-1/2" />
+                <div className="h-3 bg-gray-100 rounded w-1/3" />
+              </div>
+            ))}
+          </div>
+        ) : trips.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            <div className="bg-white rounded-2xl p-4 shadow-sm">
+              <p className="text-gray-400 text-xs">ทริปทั้งหมด</p>
+              <p className="text-3xl font-bold text-gray-900 mt-1">{trips.length}</p>
+              <p className="text-gray-500 text-xs mt-1">
+                {tripsWithExpenses > 0 ? `${tripsWithExpenses} ทริปมีค่าใช้จ่าย` : "ยังไม่มีค่าใช้จ่าย"}
+              </p>
+            </div>
+            <div className="bg-white rounded-2xl p-4 shadow-sm">
+              <p className="text-gray-400 text-xs">ค่าใช้จ่ายรวม</p>
+              <p className="text-2xl font-bold text-green-600 mt-1">
+                {totalExpense >= 10000
+                  ? `฿${(totalExpense / 1000).toFixed(0)}K`
+                  : `฿${totalExpense.toLocaleString()}`}
+              </p>
+              <p className="text-gray-500 text-xs mt-1">ทุกทริป</p>
+            </div>
+          </div>
+        ) : null}
+
         <h2 className="font-semibold text-gray-900 mb-3">ทริปของฉัน</h2>
 
         {loading ? (

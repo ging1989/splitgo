@@ -111,7 +111,15 @@ function MemberAvatar({
   );
 }
 
-function ExpenseItem({ expense }: { expense: Expense }) {
+function ExpenseItem({
+  expense,
+  onDelete,
+  deleting,
+}: {
+  expense: Expense;
+  onDelete: () => void;
+  deleting: boolean;
+}) {
   const color = categoryColor(expense.expense_categories?.name);
   const payerName = expense.payer?.full_name?.split(" ")[0] ?? "—";
   const date = new Date(expense.expense_date).toLocaleDateString("th-TH", {
@@ -138,6 +146,21 @@ function ExpenseItem({ expense }: { expense: Expense }) {
       <p className="font-bold text-gray-900 text-sm flex-shrink-0">
         ฿{expense.amount.toLocaleString()}
       </p>
+
+      <button
+        onClick={onDelete}
+        disabled={deleting}
+        className="w-8 h-8 rounded-full flex items-center justify-center text-gray-300 hover:text-red-400 hover:bg-red-50 active:bg-red-100 transition-colors flex-shrink-0 disabled:opacity-40"
+        aria-label="ลบรายการ"
+      >
+        {deleting ? (
+          <div className="w-3.5 h-3.5 rounded-full border-2 border-red-300 border-t-transparent animate-spin" />
+        ) : (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 3.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
+          </svg>
+        )}
+      </button>
     </div>
   );
 }
@@ -222,6 +245,9 @@ export default function TripDetailPage() {
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [settlementKey, setSettlementKey] = useState(0);
+  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
+  const [confirmDeleteTrip, setConfirmDeleteTrip] = useState(false);
+  const [deletingTrip, setDeletingTrip] = useState(false);
 
   useEffect(() => {
     if (id) loadData(id);
@@ -352,6 +378,28 @@ export default function TripDetailPage() {
     setSettlementKey((k) => k + 1);
   }
 
+  async function handleDeleteExpense(expenseId: string) {
+    setDeletingExpenseId(expenseId);
+    await supabase.from("expense_participants").delete().eq("expense_id", expenseId);
+    await supabase.from("expenses").delete().eq("id", expenseId);
+    setDeletingExpenseId(null);
+    if (id) await fetchExpenses(id);
+    setSettlementKey((k) => k + 1);
+  }
+
+  async function handleDeleteTrip() {
+    if (!trip) return;
+    setDeletingTrip(true);
+    const expenseIds = expenses.map((e) => e.id);
+    if (expenseIds.length > 0) {
+      await supabase.from("expense_participants").delete().in("expense_id", expenseIds);
+      await supabase.from("expenses").delete().eq("trip_id", trip.id);
+    }
+    await supabase.from("trip_members").delete().eq("trip_id", trip.id);
+    await supabase.from("trips").delete().eq("id", trip.id);
+    router.push("/trips");
+  }
+
   async function handleMemberAdded() {
     setShowAddMemberModal(false);
     if (!id) return;
@@ -399,7 +447,18 @@ export default function TripDetailPage() {
         {loading ? (
           <SkeletonBlock className="h-6 w-40" />
         ) : (
-          <h1 className="font-bold text-gray-900 text-lg truncate">{trip?.name}</h1>
+          <h1 className="font-bold text-gray-900 text-lg truncate flex-1">{trip?.name}</h1>
+        )}
+        {!loading && trip && (
+          <Link
+            href={`/trips/${trip.id}/summary`}
+            className="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-semibold px-3 py-2 rounded-full flex-shrink-0"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+              <path d="M15.5 2A1.5 1.5 0 0 0 14 3.5v13a1.5 1.5 0 0 0 3 0v-13A1.5 1.5 0 0 0 15.5 2ZM9.5 6A1.5 1.5 0 0 0 8 7.5v9a1.5 1.5 0 0 0 3 0v-9A1.5 1.5 0 0 0 9.5 6ZM3.5 10A1.5 1.5 0 0 0 2 11.5v5a1.5 1.5 0 0 0 3 0v-5A1.5 1.5 0 0 0 3.5 10Z" />
+            </svg>
+            สรุปทริป
+          </Link>
         )}
       </header>
 
@@ -522,11 +581,53 @@ export default function TripDetailPage() {
           ) : (
             <div>
               {expenses.map((e) => (
-                <ExpenseItem key={e.id} expense={e} />
+                <ExpenseItem
+                  key={e.id}
+                  expense={e}
+                  onDelete={() => handleDeleteExpense(e.id)}
+                  deleting={deletingExpenseId === e.id}
+                />
               ))}
             </div>
           )}
         </div>
+
+        {/* Delete trip */}
+        {!loading && trip && (
+          <div className="pt-2">
+            {confirmDeleteTrip ? (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-4 space-y-3">
+                <p className="text-sm font-semibold text-red-700 text-center">ยืนยันการลบทริป?</p>
+                <p className="text-xs text-red-500 text-center">
+                  ข้อมูลค่าใช้จ่ายทั้งหมดจะถูกลบถาวร
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setConfirmDeleteTrip(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600"
+                    disabled={deletingTrip}
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    onClick={handleDeleteTrip}
+                    disabled={deletingTrip}
+                    className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold disabled:opacity-60"
+                  >
+                    {deletingTrip ? "กำลังลบ..." : "ลบทริป"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDeleteTrip(true)}
+                className="w-full py-3 text-red-400 text-sm font-medium"
+              >
+                ลบทริปนี้
+              </button>
+            )}
+          </div>
+        )}
       </main>
 
       {/* Add expense FAB */}
